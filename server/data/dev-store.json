@@ -1,0 +1,56 @@
+{
+  "entries": [
+    {
+      "name": "Egg, boiled",
+      "quantity": 2,
+      "unit": "piece",
+      "weight_g": null,
+      "meal_type": "breakfast",
+      "calories_kcal": 156,
+      "protein_g": 12.6,
+      "carbs_g": 1.2,
+      "fat_g": 10.6,
+      "saturated_fat_g": null,
+      "sugar_g": null,
+      "fiber_g": null,
+      "sodium_mg": null,
+      "source": "ai_text",
+      "confidence": null,
+      "preparation": null,
+      "assumptions": [],
+      "id": "4666df38-cead-446e-9d16-0662bdc97bdf",
+      "user_id": "dev-user",
+      "client_request_id": null,
+      "eaten_at": "2026-10-21T17:40:02.364Z",
+      "local_date": "2026-10-21",
+      "created_at": "2026-10-21T17:40:02.435Z",
+      "updated_at": "2026-10-21T17:40:02.435Z"
+    }
+  ],
+  "water": [],
+  "saved": [],
+  "weights": [
+    {
+      "id": "ab4b433d-2be2-4693-973b-32d0b98a3c42",
+      "user_id": "a0000000-0000-0000-0000-000000000001",
+      "weight_kg": 79.8,
+      "waist_cm": 88,
+      "logged_date": "2026-10-21",
+      "notes": "Day 1 baseline",
+      "created_at": "2026-10-21T18:05:38.144Z"
+    }
+  ],
+  "activities": [
+    {
+      "id": "4a4d4f39-be2b-4424-9610-6c46f0efe94d",
+      "user_id": "a0000000-0000-0000-0000-000000000001",
+      "activity_type": "walking",
+      "duration_mins": 35,
+      "steps": 4200,
+      "calories_burned": null,
+      "logged_date": "2026-10-21",
+      "notes": null,
+      "created_at": "2026-10-21T18:05:38.847Z"
+    }
+  ]
+}

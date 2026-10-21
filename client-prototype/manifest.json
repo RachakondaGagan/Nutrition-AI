@@ -1,0 +1,19 @@
+{
+  "name": "NutritionX AI — Personal Journal",
+  "short_name": "NutritionX",
+  "description": "AI-assisted Personal Nutrition, Hydration & Fitness Tracker",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0c0e",
+  "theme_color": "#0b0c0e",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

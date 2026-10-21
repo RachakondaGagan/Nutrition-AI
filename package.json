@@ -1,0 +1,12 @@
+{
+  "name": "nutritionx-ai",
+  "private": true,
+  "scripts": {
+    "install:all": "npm --prefix server install",
+    "dev": "npm --prefix server run dev",
+    "build": "npm --prefix server run build",
+    "start": "npm --prefix server start",
+    "typecheck": "npm --prefix server run typecheck",
+    "test": "npm --prefix server test"
+  }
+}

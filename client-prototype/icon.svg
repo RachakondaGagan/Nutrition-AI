@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#181a20"/>
+      <stop offset="100%" stop-color="#0b0c0e"/>
+    </radialGradient>
+    <linearGradient id="limeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d4ff4d"/>
+      <stop offset="100%" stop-color="#99e600"/>
+    </linearGradient>
+    <linearGradient id="purpleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#b399ff"/>
+      <stop offset="100%" stop-color="#734dff"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+  <!-- Calorie Target Ring -->
+  <circle cx="256" cy="256" r="176" fill="none" stroke="#22262e" stroke-width="28"/>
+  <circle cx="256" cy="256" r="176" fill="none" stroke="url(#limeGrad)" stroke-width="28" stroke-dasharray="1105" stroke-dashoffset="310" stroke-linecap="round" transform="rotate(-90 256 256)"/>
+  <!-- Bold Geometric N and X Stylized Monogram -->
+  <path d="M190 170 L190 342 M190 170 L322 342 M322 170 L322 342" fill="none" stroke="url(#limeGrad)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- AI Sparkle Indicator -->
+  <polygon points="340,150 348,168 366,176 348,184 340,202 332,184 314,176 332,168" fill="url(#purpleGrad)"/>
+</svg>

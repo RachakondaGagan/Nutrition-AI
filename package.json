@@ -1,12 +1,28 @@
 {
   "name": "nutritionx-ai",
+  "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "install:all": "npm --prefix server install",
+    "postinstall": "npm --prefix server install",
+    "build": "npm --prefix server run build && mkdir -p public && cp -r client-prototype/* public/",
     "dev": "npm --prefix server run dev",
-    "build": "npm --prefix server run build",
     "start": "npm --prefix server start",
     "typecheck": "npm --prefix server run typecheck",
     "test": "npm --prefix server test"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "pg": "^8.23.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

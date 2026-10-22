@@ -1662,12 +1662,12 @@
             date: e.local_date,
             meal: e.meal_type,
             name: e.name,
-            qty: e.quantity,
+            qty: Number(e.quantity) || 1,
             unit: e.unit,
-            k: e.calories_kcal,
-            p: e.protein_g,
-            c: e.carbs_g,
-            f: e.fat_g,
+            k: e.calories_kcal != null ? Number(e.calories_kcal) : null,
+            p: e.protein_g != null ? Number(e.protein_g) : null,
+            c: e.carbs_g != null ? Number(e.carbs_g) : null,
+            f: e.fat_g != null ? Number(e.fat_g) : null,
             src: e.source || "AI Analysis"
           }));
           S.entries = [...S.entries.filter(e => e.date !== S.date), ...mapped];
@@ -1678,7 +1678,7 @@
           const mappedW = wList.map(w => ({
             id: w.id,
             date: w.local_date,
-            ml: w.amount_ml,
+            ml: Number(w.amount_ml),
             t: w.drunk_at ? w.drunk_at.slice(11, 16) : ""
           }));
           S.water = [...S.water.filter(w => w.date !== S.date), ...mappedW];
@@ -1691,9 +1691,10 @@
 
     // ─── ACTIONS ───
     async function addWater(ml) {
-      const nid = Math.random().toString(36).slice(2);
+      const nid = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : undefined;
       const tStr = new Date().toTimeString().slice(0, 5);
-      S.water.push({ id: nid, date: S.date, ml, t: tStr });
+      const nowIso = new Date().toISOString();
+      S.water.push({ id: nid || Math.random().toString(36).slice(2), date: S.date, ml, t: tStr });
       renderView();
       toast(`+${ml} ml logged 💧`);
 
@@ -1702,7 +1703,7 @@
         await fetch("/api/water", {
           method: "POST",
           headers: { "content-type": "application/json", "x-timezone": tz },
-          body: JSON.stringify({ amount_ml: ml, drunk_at: `${S.date}T${tStr}:00`, client_request_id: nid })
+          body: JSON.stringify({ amount_ml: ml, drunk_at: nowIso, client_request_id: nid })
         });
       } catch (e) {}
     }
@@ -1868,13 +1869,14 @@
     }
 
     async function commitEstimatedItems() {
-      const tStr = new Date().toTimeString().slice(0, 5);
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
+      const nowIso = new Date().toISOString();
+      const validSource = D.tab === "photo" ? "ai_image" : "ai_text";
 
       for (const r of D.rows) {
-        const nid = Math.random().toString(36).slice(2);
+        const nid = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : undefined;
         const item = {
-          id: nid,
+          id: nid || Math.random().toString(36).slice(2),
           date: S.date,
           meal: D.meal,
           name: r.name,
@@ -1884,7 +1886,7 @@
           p: r.p,
           c: r.c,
           f: r.f,
-          src: "AI estimate, confirmed"
+          src: validSource
         };
         S.entries.push(item);
         fetch("/api/food-entries", {
@@ -1899,10 +1901,12 @@
             protein_g: item.p,
             carbs_g: item.c,
             fat_g: item.f,
-            eaten_at: `${S.date}T${tStr}:00`,
-            source: item.src,
+            eaten_at: nowIso,
+            source: validSource,
             client_request_id: nid
           })
+        }).then(r => {
+          if (!r.ok) r.json().then(j => console.warn("Food entry save warning:", j));
         }).catch(() => {});
       }
 

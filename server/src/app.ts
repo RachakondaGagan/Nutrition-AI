@@ -142,8 +142,11 @@ Style & Instructions:
   }));
 
   api.get("/food-entries", wrap((req, res) => {
-    const date = DateStr.parse(req.query.date);
-    res.json(own(res).filter((e) => e.local_date === date).sort((a, b) => a.eaten_at.localeCompare(b.eaten_at)));
+    if (req.query.date) {
+      const date = DateStr.parse(req.query.date);
+      return res.json(own(res).filter((e) => e.local_date === date).sort((a, b) => a.eaten_at.localeCompare(b.eaten_at)));
+    }
+    res.json(own(res).sort((a, b) => b.eaten_at.localeCompare(a.eaten_at)));
   }));
 
   api.patch("/food-entries/:id", wrap((req, res) => {

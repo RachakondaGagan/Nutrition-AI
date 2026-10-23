@@ -1,4 +1,5 @@
 import express from "express";
+import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createApp } from "./server/dist/app.js";
@@ -6,6 +7,8 @@ import { cleanEnv, loadEnv } from "./server/dist/lib/env.js";
 import { authFromEnv } from "./server/dist/middleware/auth.js";
 import { createProvider } from "./server/dist/services/provider.js";
 import { Store } from "./server/dist/store.js";
+
+dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

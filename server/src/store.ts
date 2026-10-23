@@ -105,7 +105,11 @@ export class Store {
       catch { console.warn("[store] could not read data file; starting empty"); }
     }
     if (databaseUrl) {
-      this.pool = new pg.Pool({ connectionString: databaseUrl, max: 5 });
+      this.pool = new pg.Pool({
+        connectionString: databaseUrl,
+        max: 5,
+        ssl: databaseUrl.includes("supabase.com") ? { rejectUnauthorized: false } : undefined,
+      });
       this.initDb();
     }
   }

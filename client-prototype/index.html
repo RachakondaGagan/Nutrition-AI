@@ -1843,7 +1843,9 @@
           body: JSON.stringify({ description: txt, meal_type: meal })
         });
         const j = await res.json();
-        if (j.analysis?.items?.length) {
+        if (!res.ok) {
+          D.msg = "AI error: " + (j.error || j.message || `HTTP ${res.status}`);
+        } else if (j.analysis?.items?.length) {
           D.rows = j.analysis.items.map(i => ({
             name: i.name,
             qty: i.quantity,
@@ -1858,7 +1860,7 @@
           D.msg = "No foods recognized. Try specific items (e.g. 3 eggs, 2 rotis).";
         }
       } catch (e) {
-        D.msg = "Error connecting to AI service.";
+        D.msg = "Network error — check connection. (" + (e.message || e) + ")";
       }
       renderLogModalContent();
     }

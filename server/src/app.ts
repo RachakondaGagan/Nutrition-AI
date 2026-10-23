@@ -83,9 +83,9 @@ export function createApp(d: Deps) {
 
     const profile = await d.store.getProfile(uid(res));
     const todayDate = localDate(new Date(), tzOf(req));
-    const todayEntries = own(res).filter((e) => e.local_date === todayDate);
+    const todayEntries = await d.store.getEntries(uid(res), todayDate);
     const todayTotals = sumNutrients(todayEntries);
-    const todayWater = waterOf(res).filter((w) => w.local_date === todayDate).reduce((a, w) => a + w.amount_ml, 0);
+    const todayWater = (await d.store.getWater(uid(res), todayDate)).reduce((a, w) => a + w.amount_ml, 0);
 
     const coachSystemPrompt = `You are NutritionX AI, personal nutrition and fitness coach for ${profile?.display_name ?? "Gagan"}.
 User Profile:
@@ -122,36 +122,34 @@ Style & Instructions:
   }));
 
   // ---- Food entries ----
-  const own = (res: Response) => d.store.data.entries.filter((e) => e.user_id === uid(res));
-
-  api.post("/food-entries", wrap((req, res) => {
+  api.post("/food-entries", wrap(async (req, res) => {
     const b = EntryInput.parse(req.body);
+    const userId = uid(res);
     if (b.client_request_id) {
-      const dup = own(res).find((e) => e.client_request_id === b.client_request_id);
+      const dup = (await d.store.getEntries(userId)).find((e) => e.client_request_id === b.client_request_id);
       if (dup) return res.status(200).json(dup); // retry of a request that already succeeded
     }
     const eaten = b.eaten_at ?? now();
     const { eaten_at: _omit, client_request_id, ...rest } = b;
     const entry: FoodEntry = {
-      ...rest, id: randomUUID(), user_id: uid(res), client_request_id: client_request_id ?? null,
+      ...rest, id: randomUUID(), user_id: userId, client_request_id: client_request_id ?? null,
       eaten_at: eaten, local_date: localDate(new Date(eaten), tzOf(req)), created_at: now(), updated_at: now(),
     };
-    d.store.data.entries.push(entry);
-    d.store.save();
+    await d.store.addEntry(entry);
     res.status(201).json(entry);
   }));
 
-  api.get("/food-entries", wrap((req, res) => {
-    if (req.query.date) {
-      const date = DateStr.parse(req.query.date);
-      return res.json(own(res).filter((e) => e.local_date === date).sort((a, b) => a.eaten_at.localeCompare(b.eaten_at)));
-    }
-    res.json(own(res).sort((a, b) => b.eaten_at.localeCompare(a.eaten_at)));
+  api.get("/food-entries", wrap(async (req, res) => {
+    const userId = uid(res);
+    const date = req.query.date ? DateStr.parse(req.query.date) : undefined;
+    const list = await d.store.getEntries(userId, date);
+    res.json(list);
   }));
 
-  api.patch("/food-entries/:id", wrap((req, res) => {
+  api.patch("/food-entries/:id", wrap(async (req, res) => {
     const patch = EntryPatch.parse(req.body);
-    const e = own(res).find((x) => x.id === req.params.id);
+    const userId = uid(res);
+    const e = await d.store.getEntry(req.params.id, userId);
     if (!e) throw new AppError(404, "not_found", "Entry not found.");
     // Changing only the quantity scales every known nutrient proportionally; unknown stays unknown.
     const quantityOnly = patch.quantity !== undefined && !NUTRIENT_KEYS.some((k) => patch[k] !== undefined);
@@ -159,40 +157,39 @@ Style & Instructions:
     Object.assign(next, Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)));
     if (patch.eaten_at) next.local_date = localDate(new Date(patch.eaten_at), tzOf(req));
     next.updated_at = now();
-    Object.assign(e, next);
-    d.store.save();
-    res.json(e);
+    await d.store.updateEntry(next);
+    res.json(next);
   }));
 
-  api.delete("/food-entries/:id", wrap((req, res) => {
-    const i = d.store.data.entries.findIndex((x) => x.id === req.params.id && x.user_id === uid(res));
-    if (i < 0) throw new AppError(404, "not_found", "Entry not found.");
-    d.store.data.entries.splice(i, 1);
-    d.store.save();
-    d.store.deleteEntryDb(req.params.id);
+  api.delete("/food-entries/:id", wrap(async (req, res) => {
+    const userId = uid(res);
+    const ok = await d.store.deleteEntry(req.params.id, userId);
+    if (!ok) throw new AppError(404, "not_found", "Entry not found.");
     res.status(204).end();
   }));
 
   // ---- Summaries (always recomputed from saved entries) ----
-  const waterOf = (res: Response) => d.store.data.water.filter((w) => w.user_id === uid(res));
-
-  api.get("/nutrition/daily-summary", wrap((req, res) => {
+  api.get("/nutrition/daily-summary", wrap(async (req, res) => {
     const date = DateStr.parse(req.query.date);
-    const entries = own(res).filter((e) => e.local_date === date);
+    const userId = uid(res);
+    const entries = await d.store.getEntries(userId, date);
     const totals = sumNutrients(entries);
     const byMeal = Object.fromEntries(MEALS.map((m) => [m, sumNutrients(entries.filter((e) => e.meal_type === m)).values.calories_kcal]));
-    const water = waterOf(res).filter((w) => w.local_date === date);
+    const water = await d.store.getWater(userId, date);
     res.json({ date, entry_count: entries.length, totals: totals.values, unknown_items: totals.unknownItems,
       calories_by_meal: byMeal, water_ml: water.reduce((a, w) => a + w.amount_ml, 0) });
   }));
 
-  api.get("/nutrition/history", wrap((req, res) => {
+  api.get("/nutrition/history", wrap(async (req, res) => {
     const from = DateStr.parse(req.query.from), to = DateStr.parse(req.query.to);
+    const userId = uid(res);
+    const allEntries = await d.store.getEntries(userId);
+    const allWater = await d.store.getWater(userId);
     const days: unknown[] = [];
     for (let t = new Date(from + "T00:00:00Z"); t <= new Date(to + "T00:00:00Z") && days.length < 366; t.setUTCDate(t.getUTCDate() + 1)) {
       const date = t.toISOString().slice(0, 10);
-      const entries = own(res).filter((e) => e.local_date === date);
-      const water = waterOf(res).filter((w) => w.local_date === date);
+      const entries = allEntries.filter((e) => e.local_date === date);
+      const water = allWater.filter((w) => w.local_date === date);
       // tracked:false means "nothing logged", which is not the same as eating 0 kcal.
       days.push({ date, tracked: entries.length > 0, totals: entries.length ? sumNutrients(entries).values : null,
         water_ml: water.length ? water.reduce((a, w) => a + w.amount_ml, 0) : null });
@@ -210,35 +207,36 @@ Style & Instructions:
   }));
 
   // ---- Water ----
-  api.get("/water", wrap((req, res) => {
+  api.get("/water", wrap(async (req, res) => {
     const date = DateStr.parse(req.query.date);
-    const entries = waterOf(res).filter((w) => w.local_date === date).sort((a, b) => a.drunk_at.localeCompare(b.drunk_at));
+    const userId = uid(res);
+    const entries = await d.store.getWater(userId, date);
     res.json({ date, total_ml: entries.reduce((a, w) => a + w.amount_ml, 0), entries });
   }));
-  api.post("/water", wrap((req, res) => {
+  api.post("/water", wrap(async (req, res) => {
     const b = WaterInput.parse(req.body);
-    const dup = b.client_request_id && waterOf(res).find((w) => w.client_request_id === b.client_request_id);
-    if (dup) return res.status(200).json(dup);
+    const userId = uid(res);
+    if (b.client_request_id) {
+      const dup = (await d.store.getWater(userId)).find((w) => w.client_request_id === b.client_request_id);
+      if (dup) return res.status(200).json(dup);
+    }
     const at = b.drunk_at ?? now();
-    const w: WaterEntry = { id: randomUUID(), user_id: uid(res), client_request_id: b.client_request_id ?? null,
+    const w: WaterEntry = { id: randomUUID(), user_id: userId, client_request_id: b.client_request_id ?? null,
       amount_ml: b.amount_ml, drunk_at: at, local_date: localDate(new Date(at), tzOf(req)), created_at: now() };
-    d.store.data.water.push(w);
-    d.store.save();
+    await d.store.addWater(w);
     res.status(201).json(w);
   }));
-  api.patch("/water/:id", wrap((req, res) => {
-    const w = waterOf(res).find((x) => x.id === req.params.id);
+  api.patch("/water/:id", wrap(async (req, res) => {
+    const userId = uid(res);
+    const amount_ml = WaterPatch.parse(req.body).amount_ml;
+    const w = await d.store.updateWater(req.params.id, userId, amount_ml);
     if (!w) throw new AppError(404, "not_found", "Water entry not found.");
-    w.amount_ml = WaterPatch.parse(req.body).amount_ml;
-    d.store.save();
     res.json(w);
   }));
-  api.delete("/water/:id", wrap((req, res) => {
-    const i = d.store.data.water.findIndex((x) => x.id === req.params.id && x.user_id === uid(res));
-    if (i < 0) throw new AppError(404, "not_found", "Water entry not found.");
-    d.store.data.water.splice(i, 1);
-    d.store.save();
-    d.store.deleteWaterDb(req.params.id);
+  api.delete("/water/:id", wrap(async (req, res) => {
+    const userId = uid(res);
+    const ok = await d.store.deleteWater(req.params.id, userId);
+    if (!ok) throw new AppError(404, "not_found", "Water entry not found.");
     res.status(204).end();
   }));
 

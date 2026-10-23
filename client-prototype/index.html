@@ -108,14 +108,17 @@
       max-width: 1360px;
       margin: 0 auto;
       position: relative;
+      width: 100%;
     }
 
     /* Desktop Sidebar Nav */
     .desktop-sidebar {
       display: none;
-      width: 250px;
+      width: 220px;
+      min-width: 220px;
+      max-width: 220px;
       flex-shrink: 0;
-      padding: 28px 20px;
+      padding: 24px 16px;
       border-right: 1px solid var(--border-subtle);
       position: sticky;
       top: 0;
@@ -344,10 +347,12 @@
 
     /* Page Container */
     .page-container {
-      max-width: 1060px;
+      max-width: 1040px;
       margin: 0 auto;
       width: 100%;
       padding: 20px 20px 40px;
+      min-width: 0;
+      box-sizing: border-box;
     }
 
     /* ─── RESPONSIVE 2-COLUMN DASHBOARD GRID ─── */
@@ -355,11 +360,15 @@
       display: grid;
       grid-template-columns: 1fr;
       gap: 20px;
+      width: 100%;
+      min-width: 0;
+    }
+    @media (min-width: 1080px) {
+      .dashboard-layout {
+        grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+      }
     }
     @media (min-width: 900px) {
-      .dashboard-layout {
-        grid-template-columns: 1.4fr 1fr;
-      }
       .desktop-sidebar {
         display: flex;
       }
@@ -380,6 +389,8 @@
       margin-bottom: 20px;
       box-shadow: var(--shadow-card);
       transition: background-color 0.2s ease, border-color 0.2s ease;
+      min-width: 0;
+      overflow: hidden;
     }
     .panel-header {
       display: flex;
@@ -1196,6 +1207,24 @@
     const ML = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", snack: "Snacks" };
     const MEAL_TIMES = { breakfast: "8:00 AM", lunch: "1:30 PM", dinner: "8:00 PM", snack: "4:30 PM" };
 
+    function loadLocalCache() {
+      try {
+        const ce = localStorage.getItem("nx_entries");
+        if (ce) S.entries = JSON.parse(ce);
+        const cw = localStorage.getItem("nx_water");
+        if (cw) S.water = JSON.parse(cw);
+        const cp = localStorage.getItem("nx_profile");
+        if (cp) Object.assign(G, JSON.parse(cp));
+      } catch {}
+    }
+    function saveLocalCache() {
+      try {
+        localStorage.setItem("nx_entries", JSON.stringify(S.entries));
+        localStorage.setItem("nx_water", JSON.stringify(S.water));
+        localStorage.setItem("nx_profile", JSON.stringify(G));
+      } catch {}
+    }
+
     // ─── THEME TOGGLE ───
     function initTheme() {
       const saved = localStorage.getItem("nx-theme") || "dark";
@@ -1407,15 +1436,6 @@
                 </div>
               `;
             }).join("")}
-
-            ${!dayE.length ? `
-              <div style="background:var(--bg-surface);border:1px dashed var(--border-subtle);border-radius:20px;padding:36px;text-align:center;margin-top:10px">
-                <div style="font-size:36px;margin-bottom:8px">🥗</div>
-                <h3 style="margin:0 0 6px;font-size:16px">No meals logged for this day</h3>
-                <p style="margin:0 0 16px;font-size:13px;color:var(--text-muted)">Log meals to hit your 120g protein & 1,900 kcal target.</p>
-                <button class="btn-green-submit" style="max-width:180px;margin:0 auto" onclick="openLogModal()">Log Meal</button>
-              </div>
-            ` : ''}
           </div>
 
           <!-- RIGHT COLUMN: MACRO BALANCE & QUICK SUGGESTIONS -->
@@ -1642,8 +1662,8 @@
       try {
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
         const [fe, we, pr] = await Promise.all([
-          fetch(`/api/food-entries?date=${S.date}`, { headers: { "x-timezone": tz } }).then(r => r.ok ? r.json() : []),
-          fetch(`/api/water?date=${S.date}`, { headers: { "x-timezone": tz } }).then(r => r.ok ? r.json() : { entries: [] }),
+          fetch(`/api/food-entries?date=${S.date}`, { headers: { "x-timezone": tz } }).then(r => r.ok ? r.json() : null),
+          fetch(`/api/water?date=${S.date}`, { headers: { "x-timezone": tz } }).then(r => r.ok ? r.json() : null),
           fetch(`/api/profile`).then(r => r.ok ? r.json() : null)
         ]);
 
@@ -1673,9 +1693,8 @@
           S.entries = [...S.entries.filter(e => e.date !== S.date), ...mapped];
         }
 
-        const wList = we.entries || [];
-        if (Array.isArray(wList)) {
-          const mappedW = wList.map(w => ({
+        if (we && Array.isArray(we.entries)) {
+          const mappedW = we.entries.map(w => ({
             id: w.id,
             date: w.local_date,
             ml: Number(w.amount_ml),
@@ -1684,9 +1703,12 @@
           S.water = [...S.water.filter(w => w.date !== S.date), ...mappedW];
         }
 
+        saveLocalCache();
         renderDayStrip();
         renderView();
-      } catch (e) {}
+      } catch (e) {
+        console.warn("Sync error:", e);
+      }
     }
 
     // ─── ACTIONS ───
@@ -1694,28 +1716,41 @@
       const nid = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : undefined;
       const tStr = new Date().toTimeString().slice(0, 5);
       const nowIso = new Date().toISOString();
-      S.water.push({ id: nid || Math.random().toString(36).slice(2), date: S.date, ml, t: tStr });
-      renderView();
-      toast(`+${ml} ml logged 💧`);
 
       try {
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
-        await fetch("/api/water", {
+        const res = await fetch("/api/water", {
           method: "POST",
           headers: { "content-type": "application/json", "x-timezone": tz },
           body: JSON.stringify({ amount_ml: ml, drunk_at: nowIso, client_request_id: nid })
         });
+        if (res.ok) {
+          const w = await res.json();
+          S.water.push({ id: w.id, date: w.local_date, ml: Number(w.amount_ml), t: w.drunk_at ? w.drunk_at.slice(11, 16) : tStr });
+          saveLocalCache();
+          renderView();
+          toast(`+${ml} ml logged 💧`);
+          return;
+        }
       } catch (e) {}
+
+      // Fallback
+      S.water.push({ id: nid || Math.random().toString(36).slice(2), date: S.date, ml, t: tStr });
+      saveLocalCache();
+      renderView();
+      toast(`+${ml} ml logged 💧`);
     }
 
     async function deleteWaterLog(id) {
       S.water = S.water.filter(w => w.id !== id);
+      saveLocalCache();
       renderView();
       fetch(`/api/water/${id}`, { method: "DELETE" }).catch(() => {});
     }
 
     async function deleteFoodEntry(id) {
       S.entries = S.entries.filter(e => e.id !== id);
+      saveLocalCache();
       renderView();
       toast("Meal removed");
       fetch(`/api/food-entries/${id}`, { method: "DELETE" }).catch(() => {});
@@ -1875,41 +1910,46 @@
 
       for (const r of D.rows) {
         const nid = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : undefined;
-        const item = {
-          id: nid || Math.random().toString(36).slice(2),
-          date: S.date,
-          meal: D.meal,
-          name: r.name,
-          qty: r.qty,
-          unit: r.unit,
-          k: r.k,
-          p: r.p,
-          c: r.c,
-          f: r.f,
-          src: validSource
-        };
-        S.entries.push(item);
-        fetch("/api/food-entries", {
-          method: "POST",
-          headers: { "content-type": "application/json", "x-timezone": tz },
-          body: JSON.stringify({
-            name: item.name,
-            quantity: item.qty,
-            unit: item.unit,
-            meal_type: item.meal,
-            calories_kcal: item.k,
-            protein_g: item.p,
-            carbs_g: item.c,
-            fat_g: item.f,
-            eaten_at: nowIso,
-            source: validSource,
-            client_request_id: nid
-          })
-        }).then(r => {
-          if (!r.ok) r.json().then(j => console.warn("Food entry save warning:", j));
-        }).catch(() => {});
+        try {
+          const res = await fetch("/api/food-entries", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-timezone": tz },
+            body: JSON.stringify({
+              name: r.name,
+              quantity: r.qty,
+              unit: r.unit,
+              meal_type: D.meal,
+              calories_kcal: r.k,
+              protein_g: r.p,
+              carbs_g: r.c,
+              fat_g: r.f,
+              eaten_at: nowIso,
+              source: validSource,
+              client_request_id: nid
+            })
+          });
+          if (res.ok) {
+            const saved = await res.json();
+            S.entries.push({
+              id: saved.id,
+              date: saved.local_date,
+              meal: saved.meal_type,
+              name: saved.name,
+              qty: Number(saved.quantity),
+              unit: saved.unit,
+              k: saved.calories_kcal != null ? Number(saved.calories_kcal) : null,
+              p: saved.protein_g != null ? Number(saved.protein_g) : null,
+              c: saved.carbs_g != null ? Number(saved.carbs_g) : null,
+              f: saved.fat_g != null ? Number(saved.fat_g) : null,
+              src: saved.source
+            });
+          }
+        } catch (e) {
+          console.warn("Save food error:", e);
+        }
       }
 
+      saveLocalCache();
       $("#dlg-meal-log").close();
       toast("Meal saved to " + ML[D.meal]);
       renderView();
@@ -2006,6 +2046,7 @@
 
     // ─── INIT ───
     initTheme();
+    loadLocalCache();
     renderDayStrip();
     renderView();
     syncFromServer();

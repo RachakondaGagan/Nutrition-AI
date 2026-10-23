@@ -3,6 +3,10 @@ import path from "node:path";
 import pg from "pg";
 import type { NutrientKey } from "./schemas/nutrition.js";
 
+// Ensure DATE columns (OID 1082) are parsed as literal strings "YYYY-MM-DD"
+// without being converted to JS Date objects which get mangled by timezone offsets.
+pg.types.setTypeParser(1082, (str: string) => str);
+
 export type NutrientFields = Record<NutrientKey, number | null>;
 export type FoodEntry = NutrientFields & {
   id: string; user_id: string; client_request_id: string | null;
@@ -43,6 +47,53 @@ interface Data {
   activities: ActivityEntry[];
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DEFAULT_UUID = "a0000000-0000-0000-0000-000000000001";
+function safeDbUserId(uid: string): string {
+  return UUID_REGEX.test(uid) ? uid : DEFAULT_UUID;
+}
+
+function mapFoodRow(r: any): FoodEntry {
+  return {
+    id: r.id,
+    user_id: r.user_id,
+    client_request_id: r.client_request_id,
+    name: r.name,
+    quantity: Number(r.quantity),
+    unit: r.unit,
+    weight_g: r.weight_g != null ? Number(r.weight_g) : null,
+    meal_type: r.meal_type,
+    eaten_at: new Date(r.eaten_at).toISOString(),
+    local_date: typeof r.local_date === "string" ? r.local_date : (r.local_date instanceof Date ? r.local_date.toISOString().slice(0, 10) : String(r.local_date)),
+    calories_kcal: r.calories_kcal != null ? Number(r.calories_kcal) : null,
+    protein_g: r.protein_g != null ? Number(r.protein_g) : null,
+    carbs_g: r.carbs_g != null ? Number(r.carbs_g) : null,
+    fat_g: r.fat_g != null ? Number(r.fat_g) : null,
+    saturated_fat_g: r.saturated_fat_g != null ? Number(r.saturated_fat_g) : null,
+    sugar_g: r.sugar_g != null ? Number(r.sugar_g) : null,
+    fiber_g: r.fiber_g != null ? Number(r.fiber_g) : null,
+    sodium_mg: r.sodium_mg != null ? Number(r.sodium_mg) : null,
+    source: r.source,
+    confidence: r.confidence != null ? Number(r.confidence) : null,
+    preparation: r.preparation,
+    assumptions: Array.isArray(r.assumptions) ? r.assumptions : [],
+    created_at: new Date(r.created_at).toISOString(),
+    updated_at: new Date(r.updated_at).toISOString(),
+  };
+}
+
+function mapWaterRow(r: any): WaterEntry {
+  return {
+    id: r.id,
+    user_id: r.user_id,
+    client_request_id: r.client_request_id,
+    amount_ml: Number(r.amount_ml),
+    drunk_at: new Date(r.drunk_at).toISOString(),
+    local_date: typeof r.local_date === "string" ? r.local_date : (r.local_date instanceof Date ? r.local_date.toISOString().slice(0, 10) : String(r.local_date)),
+    created_at: new Date(r.created_at).toISOString(),
+  };
+}
+
 /** Store with dual-mode: in-memory / local JSON and Supabase PostgreSQL persistence */
 export class Store {
   data: Data = { entries: [], water: [], saved: [], weights: [], activities: [] };
@@ -70,64 +121,8 @@ export class Store {
         this.pool.query("SELECT * FROM public.activity_entries ORDER BY logged_date DESC"),
       ]);
 
-      const dbEntries: FoodEntry[] = feRes.rows.map((r: any) => ({
-        id: r.id,
-        user_id: r.user_id,
-        client_request_id: r.client_request_id,
-        name: r.name,
-        quantity: Number(r.quantity),
-        unit: r.unit,
-        weight_g: r.weight_g != null ? Number(r.weight_g) : null,
-        meal_type: r.meal_type,
-        eaten_at: new Date(r.eaten_at).toISOString(),
-        local_date: r.local_date instanceof Date ? r.local_date.toISOString().slice(0, 10) : String(r.local_date),
-        calories_kcal: r.calories_kcal != null ? Number(r.calories_kcal) : null,
-        protein_g: r.protein_g != null ? Number(r.protein_g) : null,
-        carbs_g: r.carbs_g != null ? Number(r.carbs_g) : null,
-        fat_g: r.fat_g != null ? Number(r.fat_g) : null,
-        saturated_fat_g: r.saturated_fat_g != null ? Number(r.saturated_fat_g) : null,
-        sugar_g: r.sugar_g != null ? Number(r.sugar_g) : null,
-        fiber_g: r.fiber_g != null ? Number(r.fiber_g) : null,
-        sodium_mg: r.sodium_mg != null ? Number(r.sodium_mg) : null,
-        source: r.source,
-        confidence: r.confidence != null ? Number(r.confidence) : null,
-        preparation: r.preparation,
-        assumptions: Array.isArray(r.assumptions) ? r.assumptions : [],
-        created_at: new Date(r.created_at).toISOString(),
-        updated_at: new Date(r.updated_at).toISOString(),
-      }));
-
-      const dbWater: WaterEntry[] = wRes.rows.map((r: any) => ({
-        id: r.id,
-        user_id: r.user_id,
-        client_request_id: r.client_request_id,
-        amount_ml: Number(r.amount_ml),
-        drunk_at: new Date(r.drunk_at).toISOString(),
-        local_date: r.local_date instanceof Date ? r.local_date.toISOString().slice(0, 10) : String(r.local_date),
-        created_at: new Date(r.created_at).toISOString(),
-      }));
-
-      const dbWeights: WeightEntry[] = wtRes.rows.map((r: any) => ({
-        id: r.id,
-        user_id: r.user_id,
-        weight_kg: Number(r.weight_kg),
-        waist_cm: r.waist_cm != null ? Number(r.waist_cm) : null,
-        logged_date: r.logged_date instanceof Date ? r.logged_date.toISOString().slice(0, 10) : String(r.logged_date),
-        notes: r.notes,
-        created_at: new Date(r.created_at).toISOString(),
-      }));
-
-      const dbActivities: ActivityEntry[] = actRes.rows.map((r: any) => ({
-        id: r.id,
-        user_id: r.user_id,
-        activity_type: r.activity_type,
-        duration_mins: Number(r.duration_mins),
-        steps: r.steps != null ? Number(r.steps) : null,
-        calories_burned: r.calories_burned != null ? Number(r.calories_burned) : null,
-        logged_date: r.logged_date instanceof Date ? r.logged_date.toISOString().slice(0, 10) : String(r.logged_date),
-        notes: r.notes,
-        created_at: new Date(r.created_at).toISOString(),
-      }));
+      const dbEntries = feRes.rows.map(mapFoodRow);
+      const dbWater = wRes.rows.map(mapWaterRow);
 
       const entryIds = new Set(this.data.entries.map((e) => e.id));
       for (const e of dbEntries) {
@@ -137,10 +132,8 @@ export class Store {
       for (const w of dbWater) {
         if (!waterIds.has(w.id)) { this.data.water.push(w); waterIds.add(w.id); }
       }
-      this.data.weights = dbWeights;
-      this.data.activities = dbActivities;
 
-      console.log(`[supabase] Loaded ${dbEntries.length} food entries, ${dbWater.length} water entries, ${dbWeights.length} weight logs from PostgreSQL.`);
+      console.log(`[supabase] Loaded ${dbEntries.length} food entries, ${dbWater.length} water entries from PostgreSQL.`);
     } catch (err) {
       console.warn("[supabase] Failed to load data from postgres:", (err as Error).message);
     }
@@ -153,14 +146,46 @@ export class Store {
         fs.writeFileSync(this.file, JSON.stringify(this.data, null, 2));
       } catch {}
     }
-    if (this.pool) {
-      this.syncDb().catch((e) => console.warn("[supabase] Sync failed:", e.message));
-    }
   }
 
-  private async syncDb(): Promise<void> {
-    if (!this.pool) return;
-    for (const e of this.data.entries) {
+  // ---- FOOD ENTRIES ----
+  async getEntries(userId: string, date?: string): Promise<FoodEntry[]> {
+    if (this.pool) {
+      try {
+        const dbUid = safeDbUserId(userId);
+        const query = date
+          ? "SELECT * FROM public.food_entries WHERE user_id = $1 AND local_date = $2 ORDER BY eaten_at ASC"
+          : "SELECT * FROM public.food_entries WHERE user_id = $1 ORDER BY eaten_at DESC";
+        const params = date ? [dbUid, date] : [dbUid];
+        const res = await this.pool.query(query, params);
+        return res.rows.map(mapFoodRow);
+      } catch (err) {
+        console.warn("[supabase] getEntries failed:", (err as Error).message);
+      }
+    }
+    // In-memory fallback
+    const list = this.data.entries.filter((e) => e.user_id === userId);
+    if (date) return list.filter((e) => e.local_date === date).sort((a, b) => a.eaten_at.localeCompare(b.eaten_at));
+    return list.sort((a, b) => b.eaten_at.localeCompare(a.eaten_at));
+  }
+
+  async getEntry(id: string, userId: string): Promise<FoodEntry | undefined> {
+    if (this.pool) {
+      try {
+        const dbUid = safeDbUserId(userId);
+        const res = await this.pool.query("SELECT * FROM public.food_entries WHERE id = $1 AND user_id = $2", [id, dbUid]);
+        if (res.rows[0]) return mapFoodRow(res.rows[0]);
+      } catch {}
+    }
+    return this.data.entries.find((e) => e.id === id && e.user_id === userId);
+  }
+
+  async addEntry(e: FoodEntry): Promise<FoodEntry> {
+    this.data.entries.push(e);
+    this.save();
+
+    if (this.pool) {
+      const dbUid = safeDbUserId(e.user_id);
       await this.pool.query(`
         INSERT INTO public.food_entries (
           id, user_id, client_request_id, name, quantity, unit, weight_g,
@@ -179,43 +204,123 @@ export class Store {
           fat_g = EXCLUDED.fat_g,
           updated_at = EXCLUDED.updated_at
       `, [
-        e.id, e.user_id, e.client_request_id, e.name, e.quantity, e.unit, e.weight_g,
+        e.id, dbUid, e.client_request_id, e.name, e.quantity, e.unit, e.weight_g,
         e.meal_type, e.eaten_at, e.local_date, e.calories_kcal, e.protein_g, e.carbs_g,
         e.fat_g, e.saturated_fat_g, e.sugar_g, e.fiber_g, e.sodium_mg, e.source,
         e.confidence, e.preparation, e.assumptions, e.created_at, e.updated_at
-      ]).catch((err) => console.warn(`[supabase] entry insert error:`, err.message));
+      ]).catch((err) => console.warn(`[supabase] addEntry error:`, err.message));
     }
-    for (const w of this.data.water) {
+    return e;
+  }
+
+  async updateEntry(e: FoodEntry): Promise<FoodEntry> {
+    const idx = this.data.entries.findIndex((x) => x.id === e.id);
+    if (idx >= 0) this.data.entries[idx] = e;
+    this.save();
+
+    if (this.pool) {
+      const dbUid = safeDbUserId(e.user_id);
+      await this.pool.query(`
+        UPDATE public.food_entries SET
+          quantity = $1, unit = $2, weight_g = $3, meal_type = $4,
+          eaten_at = $5, local_date = $6, calories_kcal = $7,
+          protein_g = $8, carbs_g = $9, fat_g = $10, saturated_fat_g = $11,
+          sugar_g = $12, fiber_g = $13, sodium_mg = $14, updated_at = $15
+        WHERE id = $16 AND user_id = $17
+      `, [
+        e.quantity, e.unit, e.weight_g, e.meal_type, e.eaten_at, e.local_date,
+        e.calories_kcal, e.protein_g, e.carbs_g, e.fat_g, e.saturated_fat_g,
+        e.sugar_g, e.fiber_g, e.sodium_mg, e.updated_at, e.id, dbUid
+      ]).catch((err) => console.warn("[supabase] updateEntry error:", err.message));
+    }
+    return e;
+  }
+
+  async deleteEntry(id: string, userId: string): Promise<boolean> {
+    const i = this.data.entries.findIndex((x) => x.id === id && x.user_id === userId);
+    if (i >= 0) this.data.entries.splice(i, 1);
+    this.save();
+
+    if (this.pool) {
+      const dbUid = safeDbUserId(userId);
+      const res = await this.pool.query("DELETE FROM public.food_entries WHERE id = $1 AND user_id = $2", [id, dbUid]).catch(() => ({ rowCount: 0 }));
+      return (res.rowCount ?? 0) > 0 || i >= 0;
+    }
+    return i >= 0;
+  }
+
+  // ---- WATER ENTRIES ----
+  async getWater(userId: string, date?: string): Promise<WaterEntry[]> {
+    if (this.pool) {
+      try {
+        const dbUid = safeDbUserId(userId);
+        const query = date
+          ? "SELECT * FROM public.water_entries WHERE user_id = $1 AND local_date = $2 ORDER BY drunk_at ASC"
+          : "SELECT * FROM public.water_entries WHERE user_id = $1 ORDER BY drunk_at ASC";
+        const params = date ? [dbUid, date] : [dbUid];
+        const res = await this.pool.query(query, params);
+        return res.rows.map(mapWaterRow);
+      } catch (err) {
+        console.warn("[supabase] getWater failed:", (err as Error).message);
+      }
+    }
+    const list = this.data.water.filter((w) => w.user_id === userId);
+    if (date) return list.filter((w) => w.local_date === date).sort((a, b) => a.drunk_at.localeCompare(b.drunk_at));
+    return list.sort((a, b) => a.drunk_at.localeCompare(b.drunk_at));
+  }
+
+  async addWater(w: WaterEntry): Promise<WaterEntry> {
+    this.data.water.push(w);
+    this.save();
+
+    if (this.pool) {
+      const dbUid = safeDbUserId(w.user_id);
       await this.pool.query(`
         INSERT INTO public.water_entries (
           id, user_id, client_request_id, amount_ml, drunk_at, local_date, created_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (id) DO UPDATE SET amount_ml = EXCLUDED.amount_ml
-      `, [w.id, w.user_id, w.client_request_id, w.amount_ml, w.drunk_at, w.local_date, w.created_at])
-      .catch((err) => console.warn(`[supabase] water insert error:`, err.message));
+      `, [w.id, dbUid, w.client_request_id, w.amount_ml, w.drunk_at, w.local_date, w.created_at])
+      .catch((err) => console.warn(`[supabase] addWater error:`, err.message));
     }
+    return w;
   }
 
-  async deleteEntryDb(id: string): Promise<void> {
+  async updateWater(id: string, userId: string, amount_ml: number): Promise<WaterEntry | undefined> {
+    const w = this.data.water.find((x) => x.id === id && x.user_id === userId);
+    if (w) w.amount_ml = amount_ml;
+    this.save();
+
     if (this.pool) {
-      await this.pool.query("DELETE FROM public.food_entries WHERE id = $1", [id]).catch(() => {});
+      const dbUid = safeDbUserId(userId);
+      await this.pool.query("UPDATE public.water_entries SET amount_ml = $1 WHERE id = $2 AND user_id = $3", [amount_ml, id, dbUid])
+        .catch(() => {});
     }
+    return w;
   }
 
-  async deleteWaterDb(id: string): Promise<void> {
+  async deleteWater(id: string, userId: string): Promise<boolean> {
+    const i = this.data.water.findIndex((x) => x.id === id && x.user_id === userId);
+    if (i >= 0) this.data.water.splice(i, 1);
+    this.save();
+
     if (this.pool) {
-      await this.pool.query("DELETE FROM public.water_entries WHERE id = $1", [id]).catch(() => {});
+      const dbUid = safeDbUserId(userId);
+      const res = await this.pool.query("DELETE FROM public.water_entries WHERE id = $1 AND user_id = $2", [id, dbUid]).catch(() => ({ rowCount: 0 }));
+      return (res.rowCount ?? 0) > 0 || i >= 0;
     }
+    return i >= 0;
   }
 
+  // ---- USER PROFILE ----
   async getProfile(userId: string): Promise<UserProfile | null> {
     if (this.pool) {
       try {
-        const res = await this.pool.query("SELECT * FROM public.profiles WHERE id = $1", [userId]);
+        const dbUid = safeDbUserId(userId);
+        const res = await this.pool.query("SELECT * FROM public.profiles WHERE id = $1", [dbUid]);
         if (res.rows[0]) return res.rows[0];
       } catch {}
     }
-    // Default Gagan's personalized profile
     return {
       id: userId,
       display_name: "Gagan",
@@ -237,11 +342,12 @@ export class Store {
 
   async updateProfile(userId: string, patch: Partial<UserProfile>): Promise<UserProfile> {
     if (this.pool) {
+      const dbUid = safeDbUserId(userId);
       const keys = Object.keys(patch).filter((k) => k !== "id");
       if (keys.length > 0) {
         const sets = keys.map((k, i) => `${k} = $${i + 2}`).join(", ");
         const values = keys.map((k) => (patch as any)[k]);
-        await this.pool.query(`UPDATE public.profiles SET ${sets}, updated_at = now() WHERE id = $1`, [userId, ...values]).catch(() => {});
+        await this.pool.query(`UPDATE public.profiles SET ${sets}, updated_at = now() WHERE id = $1`, [dbUid, ...values]).catch(() => {});
       }
     }
     return (await this.getProfile(userId))!;
@@ -260,9 +366,10 @@ export class Store {
     this.data.weights.unshift(entry);
     this.save();
     if (this.pool) {
+      const dbUid = safeDbUserId(userId);
       await this.pool.query(
         "INSERT INTO public.weight_entries (id, user_id, weight_kg, waist_cm, logged_date, notes) VALUES ($1, $2, $3, $4, $5, $6)",
-        [entry.id, entry.user_id, entry.weight_kg, entry.waist_cm, entry.logged_date, entry.notes]
+        [entry.id, dbUid, entry.weight_kg, entry.waist_cm, entry.logged_date, entry.notes]
       ).catch(() => {});
     }
     return entry;
@@ -283,9 +390,10 @@ export class Store {
     this.data.activities.unshift(entry);
     this.save();
     if (this.pool) {
+      const dbUid = safeDbUserId(userId);
       await this.pool.query(
         "INSERT INTO public.activity_entries (id, user_id, activity_type, duration_mins, steps, calories_burned, logged_date, notes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-        [entry.id, entry.user_id, entry.activity_type, entry.duration_mins, entry.steps, entry.calories_burned, entry.logged_date, entry.notes]
+        [entry.id, dbUid, entry.activity_type, entry.duration_mins, entry.steps, entry.calories_burned, entry.logged_date, entry.notes]
       ).catch(() => {});
     }
     return entry;

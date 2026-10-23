@@ -25,9 +25,45 @@
       "local_date": "2026-10-21",
       "created_at": "2026-10-21T17:40:02.435Z",
       "updated_at": "2026-10-21T17:40:02.435Z"
+    },
+    {
+      "name": "3 Boiled Eggs",
+      "quantity": 3,
+      "unit": "piece",
+      "weight_g": null,
+      "meal_type": "breakfast",
+      "calories_kcal": 210,
+      "protein_g": 18,
+      "carbs_g": 1.5,
+      "fat_g": 15,
+      "saturated_fat_g": null,
+      "sugar_g": null,
+      "fiber_g": null,
+      "sodium_mg": null,
+      "source": "ai_text",
+      "confidence": null,
+      "preparation": null,
+      "assumptions": [],
+      "id": "5b839782-193f-496f-a74f-70a43cf73b62",
+      "user_id": "a0000000-0000-0000-0000-000000000001",
+      "client_request_id": "b1111111-1111-1111-1111-111111111111",
+      "eaten_at": "2026-10-23T08:00:00.000Z",
+      "local_date": "2026-10-23",
+      "created_at": "2026-10-22T18:30:46.618Z",
+      "updated_at": "2026-10-22T18:30:46.618Z"
     }
   ],
-  "water": [],
+  "water": [
+    {
+      "id": "11c35d04-eddc-49f6-a877-610558d51c32",
+      "user_id": "a0000000-0000-0000-0000-000000000001",
+      "client_request_id": "c2222222-2222-2222-2222-222222222222",
+      "amount_ml": 250,
+      "drunk_at": "2026-10-23T08:30:00.000Z",
+      "local_date": "2026-10-23",
+      "created_at": "2026-10-22T18:32:45.607Z"
+    }
+  ],
   "saved": [],
   "weights": [
     {
@@ -35,9 +71,9 @@
       "user_id": "a0000000-0000-0000-0000-000000000001",
       "weight_kg": 79.8,
       "waist_cm": 88,
-      "logged_date": "2026-10-21",
+      "logged_date": "2026-10-20",
       "notes": "Day 1 baseline",
-      "created_at": "2026-10-21T18:05:38.144Z"
+      "created_at": "2026-10-21T18:05:38.752Z"
     }
   ],
   "activities": [
@@ -48,9 +84,9 @@
       "duration_mins": 35,
       "steps": 4200,
       "calories_burned": null,
-      "logged_date": "2026-10-21",
+      "logged_date": "2026-10-20",
       "notes": null,
-      "created_at": "2026-10-21T18:05:38.847Z"
+      "created_at": "2026-10-21T18:05:39.256Z"
     }
   ]
 }

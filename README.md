@@ -1,4 +1,4 @@
-# NutritionX AI
+# NutritionX AI - Personal Project
 
 AI-assisted nutrition journal. **This download contains the backend and a front-end prototype. It does not yet contain the React client wired to the API.** See "What is and isn't here".
 
